@@ -15,19 +15,34 @@ model User {
   wallet   Wallet?
 }
 
+enum TransactionType {
+  DEPOSIT
+  WITHDRAW
+  TRANSFER
+}
+
 model Wallet {
-  id    String @id @default(uuid())
-  userId String @unique
-  user User @relation(fields: [userId], references: [id])
-  balance Float @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                    String        @id @default(uuid())
+  userId                String        @unique
+  user                  User          @relation(fields: [userId], references: [id])
+  balance               Decimal       @default(0) @db.Decimal(10, 2)
+  debitedTransactions   Transaction[] @relation("DebitedTransactions")
+  creditedTransactions  Transaction[] @relation("CreditedTransactions")
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
 }
 
 model Transaction {
-  id    String @id @default(uuid())
-  walletId String
-  amount Float
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                  String          @id @default(uuid())
+  type                TransactionType
+  
+  debitedAccountId    String?
+  debitedAccount      Wallet?         @relation("DebitedTransactions", fields: [debitedAccountId], references: [id], onDelete: Cascade)
+  
+  creditedAccountId   String?
+  creditedAccount     Wallet?         @relation("CreditedTransactions", fields: [creditedAccountId], references: [id], onDelete: Cascade)
+  
+  amount              Decimal         @db.Decimal(10, 2)
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
 }
