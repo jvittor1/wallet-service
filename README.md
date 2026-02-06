@@ -17,6 +17,22 @@ API REST para gerenciamento de carteiras digitais com NestJS e PostgreSQL.
 - Docker para ambiente de desenvolvimento
 - Jest para testes
 
+## Sistema de Mensageria (Kafka)
+
+O projeto utiliza **Apache Kafka** para processamento assíncrono de eventos, garantindo desacoplamento entre os serviços.
+
+### Fluxo de Notificação de Transações
+
+1. Quando uma transação (depósito, saque ou transferência) é criada com sucesso, o `TransactionService` publica um evento no tópico `transactions.created`.
+2. O `TransactionEmailConsumer` (consumer) escuta este tópico.
+3. Ao receber o evento, o consumidor busca os detalhes da transação e envia um email de notificação para os usuários envolvidos usando o `Nodemailer`.
+
+**Infraestrutura:**
+
+- **Zookeeper**: Gerenciamento do cluster Kafka.
+- **Kafka Broker**: Servidor de mensagens.
+- **Microservices**: A arquitetura permite que consumidores escalem independentemente da API principal.
+
 ## Pré-requisitos
 
 - Node.js >= 18
@@ -27,7 +43,7 @@ API REST para gerenciamento de carteiras digitais com NestJS e PostgreSQL.
 ### Com Docker (recomendado)
 
 ```bash
-docker-compose up
+docker-compose up --build
 ```
 
 A API vai rodar em `http://localhost:3000`
@@ -42,11 +58,22 @@ npm run start:dev
 
 ## Configuração
 
-Crie um arquivo `.env`:
+Crie um arquivo `.env` na raiz do projeto:
 
 ```env
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/wallet"
 PORT=3000
+
+# Kafka Config
+KAFKA_BROKER="localhost:9092"
+KAFKA_CLIENT_ID="wallet-service"
+KAFKA_GROUP_ID="wallet-consumer-group"
+
+# Email Config (Gmail Example)
+SMTP_HOST="smtp.gmail.com"
+SMTP_PORT=587
+SMTP_USER="seu-email@gmail.com"
+SMTP_PASS="sua-senha-de-app"
 ```
 
 ## Endpoints
@@ -78,7 +105,7 @@ POST /user
 POST   /wallet              - Criar carteira
 GET    /wallet              - Listar carteiras
 GET    /wallet/:id          - Buscar por ID
-GET    /wallet/user/:userId - Buscar por ID do usuário
+GET    /wallet/user/:userId - Buscar por ID do usuário (Para descobrir o ID da Wallet)
 DELETE /wallet/:id          - Deletar
 ```
 
@@ -97,7 +124,7 @@ POST /wallet
 GET  /transaction                  - Listar transações
 GET  /transaction/:id              - Buscar por ID
 POST /transaction/deposit-withdraw - Depósito ou saque
-POST /transaction/transfer         - Transferência
+POST /transaction/transfer         - Transferência entre carteiras
 ```
 
 **Depósito:**
@@ -124,11 +151,14 @@ POST /transaction/deposit-withdraw
 
 **Transferência:**
 
+> **Atenção:** Para transferências, utilize o ID da **Carteira** (Wallet), não o ID do Usuário.
+
 ```json
 POST /transaction/transfer
 {
-  "amount": 75.00,
-  "toUserId": "uuid-usuario-destino"
+  "debitedAccountId": "uuid-carteira-origem",
+  "creditedAccountId": "uuid-carteira-destino",
+  "amount": 75.00
 }
 ```
 

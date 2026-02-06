@@ -7,10 +7,15 @@ import { DepositWithdrawDto, TransferDto } from './dto/create-transaction.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { TransactionType } from '@prisma/client';
 import { ResponseTransactionDto } from './dto/response-transaction.dto';
+import { KafkaService } from 'src/kafka/kafka.service';
+import { KAFKA_TOPICS } from 'src/kafka/kafka.config';
 
 @Injectable()
 export class TransactionService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private kafkaService: KafkaService,
+  ) {}
 
   async findAll(): Promise<ResponseTransactionDto[]> {
     const transactions = await this.prisma.transaction.findMany();
@@ -66,7 +71,7 @@ export class TransactionService {
         data: { balance: newBalance },
       });
 
-      return await prisma.transaction.create({
+      const createdTransaction = await prisma.transaction.create({
         data: {
           creditedAccountId: type === TransactionType.DEPOSIT ? walletId : null,
           debitedAccountId: type === TransactionType.WITHDRAW ? walletId : null,
@@ -74,6 +79,15 @@ export class TransactionService {
           type,
         },
       });
+
+      await this.kafkaService.send(KAFKA_TOPICS.TRANSACTION_CREATED, {
+        id: createdTransaction.id,
+        type: createdTransaction.type,
+        amount: createdTransaction.amount.toNumber(),
+        createdAt: createdTransaction.createdAt,
+      });
+
+      return createdTransaction;
     });
   }
 
@@ -121,7 +135,7 @@ export class TransactionService {
         data: { balance: newCreditedBalance },
       });
 
-      return await prisma.transaction.create({
+      const createdTransaction = await prisma.transaction.create({
         data: {
           debitedAccountId,
           creditedAccountId,
@@ -129,6 +143,15 @@ export class TransactionService {
           type: TransactionType.TRANSFER,
         },
       });
+
+      await this.kafkaService.send(KAFKA_TOPICS.TRANSACTION_CREATED, {
+        id: createdTransaction.id,
+        type: createdTransaction.type,
+        amount: createdTransaction.amount.toNumber(),
+        createdAt: createdTransaction.createdAt,
+      });
+
+      return createdTransaction;
     });
   }
 }
